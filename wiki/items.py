@@ -9,6 +9,11 @@ import scrapy
 
 
 class WikiItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+    title = scrapy.Field()
+    url = scrapy.Field(
+        key=True
+    )
+    image = scrapy.Field()
+    detail = scrapy.Field()
+    internal_link = scrapy.Field()
+    updateAt = scrapy.Field()
