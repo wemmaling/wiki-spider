@@ -13,7 +13,7 @@ class CatSpider(scrapy.Spider):
         self.brand_list = []
 
     def start_requests(self):
-        yield Request(url="https://zh.wikipedia.org/zh-cn/Category:%E5%93%81%E7%89%8C",
+        yield Request(url="https://zh.wikipedia.org/zh-cn/Category:%E5%94%B1%E7%89%87%E5%85%AC%E5%8F%B8%E6%A8%A1%E6%9D%BF",
                       callback=self.parse)
 
     def parse(self, response):
@@ -26,7 +26,7 @@ class CatSpider(scrapy.Spider):
         for li in brand_li:
             title = li.xpath('./a/text()').extract_first()
             url = 'https://zh.wikipedia.org/zh-cn' + re.search('/wiki(.*?)$', li.xpath('./a/@href').extract_first()).group(1)
-            collection.insert({'title': title, 'url': url, 'category': unquote(current_cat)})
+            collection.remove({'title': title, 'url': url})
             self.brand_list.append({'title': title, 'url': url, 'category': current_cat})
         sub_cats = response.xpath(
             '//div[@id="mw-subcategories"]//div[@class="mw-category"]//li//a[@class="CategoryTreeLabel'

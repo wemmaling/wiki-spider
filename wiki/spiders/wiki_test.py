@@ -31,6 +31,7 @@ class WikiSpider(scrapy.Spider):
         'ITEM_PIPELINES': {
             "wiki.pipelines.WikiPipeline": 300,  # 通过pipeline存入数据库
         },
+        # 'LOG_LEVEL': 'ERROR',
         'DUPEFILTER_DEBUG': True,
         'MONGO_URI': '10.214.224.142:20000',
         'MONGO_DATABASE': 'crawler_wiki',
@@ -48,18 +49,23 @@ class WikiSpider(scrapy.Spider):
         return brand_list
 
     def start_requests(self):
-        # urls = self.get_urls()
-        # for url in urls:
-        #     yield Request(url=url, callback=self.parse)
-        yield Request(url='https://zh.wikipedia.org/zh-cn/Product_Red',
-                      callback=self.parse)
+        urls = self.get_urls()
+        for url in urls:
+            yield Request(url=url, callback=self.parse)
+        # yield Request(url='https://zh.wikipedia.org/wiki/%E6%84%9B%E9%A6%AC%E4%BB%95',
+        #               callback=self.parse)
 
     def parse(self, response):
         item = WikiItem()
         title = response.xpath('//h1[@id="firstHeading"]/text()').extract_first()
         item['title'] = title
         item['url'] = response.url
-        tr_list = response.xpath('//table[@class="infobox vcard"]/tr')
+        # tr_list = response.xpath('//table[@class="infobox vcard"]/tr')
+        tr_list = response.css('.infobox tr')
+        image = tr_list.xpath('//a[@class="image"]/img/@src').extract_first()
+        if image is not None:
+            item['image'] = "https:" + image
+
         r_part = re.compile(r'\[\d.\]|\[\d\]')
 
         # 右侧的info_box表格
@@ -69,23 +75,29 @@ class WikiSpider(scrapy.Spider):
             if th is not None:
                 td = re.sub(r_part, "", "".join(tr.xpath('./td//text()').extract()))
                 info_box.append({'key': th, 'value': stripTagSimple(td)})
-        # print(info_box)
+        print(info_box)
         # print(title)
 
-        image = []
+        pic = []
         thumb_tright = response.xpath('//div[@class="thumb tright"]/div[@class="thumbinner"]')
-        for pic in thumb_tright:
-            img = 'https:' + pic.xpath('./a/img/@src').extract_first()
-            img_desc = re.sub(r_part, "", "".join(pic.xpath('./div[@class="thumbcaption"]//text()').extract()))
-
-            image.append({'url': img, 'img_desc': stripTagSimple(img_desc)})
-        # print(image)
-        item['image'] = image
+        for p in thumb_tright:
+            if p.xpath('./a/img/@src').extract_first() is not None:
+                img = 'https:' + p.xpath('./a/img/@src').extract_first()
+                img_desc = re.sub(r_part, "", "".join(p.xpath('./div[@class="thumbcaption"]//text()').extract()))
+                pic.append({'url': img, 'img_desc': stripTagSimple(img_desc)})
+        # print(pic)
+        item['pic'] = pic
 
         html_content = response.xpath('//div[@id="mw-content-text"]').extract_first()
         soup = BeautifulSoup(html_content, 'html.parser')
         # 销毁目录节点
-        soup.find('div', class_="toc").decompose()
+        catalog = soup.find('div', class_="toc")
+        if catalog is not None:
+            soup.find('div', class_="toc").decompose()
+        # 销毁参考资料节点
+        ref = soup.find('ol', class_="references")
+        if ref is not None:
+            soup.find('ol', class_="references").decompose()
 
         # ps是文中所有的段落
         div = soup.find(name='div', class_='mw-parser-output')
@@ -98,7 +110,7 @@ class WikiSpider(scrapy.Spider):
         summary = {}
         s_index = 0
         while s_index < index:
-            summary[f'{s_index}'] = ps[s_index].get_text()
+            summary[f'{s_index}'] = stripTagSimple(ps[s_index].get_text())
             s_index += 1
         print(summary)
 
@@ -116,24 +128,18 @@ class WikiSpider(scrapy.Spider):
                 lists[i] = '<h2>' + lists[i]
                 final_soup = BeautifulSoup(lists[i], 'html.parser')
                 para_title = final_soup.find('span', class_="mw-headline").get_text().strip()
-                para_contents = final_soup.find_all(['ul', 'p', 'ol', 'table'])
+                if para_title == "外部链接" or "参考" in para_title:
+                    i += 1
+                    continue
+                para_contents = final_soup.find_all(['p', 'li', 'table'])
                 texts = []
                 for para in para_contents:
-                    if para.find_all('table'):
-                        print('文中有table')
-                        for t in para.find_all('table'):
-                            texts.append(t)
-                    if para.find_all('li'):
-                        for li in para.find_all('li'):
-                            print(stripTagSimple(li.get_text().strip()))
-                            texts.append(li.get_text().strip())
-                    else:
-                        for p_para in para.find_all('p', recursive=False):
-                            texts.append(p_para.get_text().strip())
-                content_text[para_title] = texts
+                    if para.name == 'table':
+                        texts.append(para.prettify())
+                        continue
+                    texts.append(stripTagSimple(para.get_text('', True)))
+                content_text[para_title.replace('.', '点')] = texts
                 i += 1
-            if content_text == {}:
-                summary = stripTagSimple(response.xpath('//div[@class="mw-parser-output"]/p').extract_first())
             catlinks = response.xpath('//div[@class="catlinks"]/div[@id="mw-normal-catlinks"]//li')
 
             tag = {}

@@ -8,7 +8,7 @@ import pymongo
 
 
 class WikiPipeline(object):
-    collection_name = 'brand'
+    collection_name = 'wiki_data'
 
     def __init__(self, mongo_uri, mongo_db):
         self.mongo_uri = mongo_uri

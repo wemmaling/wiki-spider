@@ -17,3 +17,4 @@ class WikiItem(scrapy.Item):
     detail = scrapy.Field()
     internal_link = scrapy.Field()
     updateAt = scrapy.Field()
+    pic = scrapy.Field()
